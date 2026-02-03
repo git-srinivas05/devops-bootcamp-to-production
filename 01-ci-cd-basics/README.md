@@ -137,6 +137,10 @@ Why this works
 * Tests run as part of build
 
 
+How the Pipeline Is Triggered
+   The pipeline is triggered manually during development.In real environments, this would typically be triggered via GitHub webhooks on every       push or pull request.
+
+
 Issues Faced and Lessons Learned
 1. Maven Not Found
      mvn: not found
@@ -167,3 +171,6 @@ Outcome of This Stage
     * Tests executed consistently
     * Fail-fast CI pipeline
     * Codebase ready for containerization
+
+Design Summary
+    This CI setup enforces early validation of application correctness.By separating build and test automation from packaging and deployment,         failures are detected quickly and debugging remains simple.This foundation allows Docker and deployment stages to be added without               weakening feedback loops.
