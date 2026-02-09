@@ -12,23 +12,32 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build & Test') {
             steps {
                 dir('00-foundations/app') {
                     sh 'mvn clean package'
                 }
             }
         }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                  docker build \
+                    -t foundations-app:ci \
+                    -f 02-docker/Dockerfile .
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build successful'
+            echo 'CI passed and Docker image built'
         }
         failure {
-            echo 'Build failed'
+            echo 'Pipeline failed before Docker packaging'
         }
     }
 }
-
 
