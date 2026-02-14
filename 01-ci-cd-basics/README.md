@@ -1,8 +1,17 @@
+Repository Structure
+00-foundations/
+    └── Spring Boot Application
+01-ci-cd-basics/
+    ├── Jenkinsfile
+    └── README.md
+02-docker/
+    └── Dockerfile
+
 Stage 1 – CI/CD Basics (Jenkins)
 Purpose of This Stage
 This stage introduces Continuous Integration (CI) using Jenkins. The goal is to ensure that every code change is automatically built and tested before moving to packaging (Docker) or deployment.
 This stage intentionally does NOT include Docker, Kubernetes, or Terraform to keep the focus on CI fundamentals.
-
+  
 What This Stage Demonstrates
  * Jenkins Pipeline as Code using a Jenkinsfile
  * Jenkins controller–agent architecture
@@ -11,17 +20,14 @@ What This Stage Demonstrates
  * Correct handling of repository root vs subdirectory
  * Debugging real Jenkins issues faced in practice
 
-High-Level CI Flow
-Developer Pushes Code
-        ↓
-Jenkins Pipeline Triggered
-        ↓
-Checkout Source Code
-        ↓
-Run Maven Build & Tests
-        ↓
-Success → Ready for Packaging
-Failure → Pipeline Stops
+Developer Push
+      ↓
+GitHub Repository
+      ↓
+Jenkins (Dockerized)
+      ├── Checkout Source
+      ├── Maven Build
+      └── Docker Image Build
 
 How Jenkins Works Internally (Simplified)
   * Jenkins Controller Orchestrates pipelines, schedules jobs, manages credentials and plugins.
@@ -38,8 +44,9 @@ Jenkins Installation (Local – Docker Based)
 
  Step 2: Start Jenkins container
 docker run -d --name jenkins -p 8081:8080 -p 50000:50000 jenkins/jenkins:lts
+
 Command breakdown
-Commands                               	 Explanation
+**Commands**                              	 **Explanation**
 -d	                                     Run container in background
 --name jenkins	                         Fixed container name
 -p 8081:8080	                           Jenkins UI access
@@ -48,20 +55,59 @@ Commands                               	 Explanation
 jenkins/jenkins:lts	                     Stable Jenkins version
 Step 3: Unlock Jenkins
   docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
-   Why Jenkins generates a one-time password on first startup.
+Why Jenkins generates a one-time password on first startup.
 Access UI: http://localhost:8081
 
-Common Docker Jenkins Errors & Fixes
-   1.Docker daemon not running
-      Cannot connect to the Docker daemon
-       → Start Docker Desktop.
-   2.Container name conflict
-        Container name "/jenkins" is already in use
-        docker start jenkins or docker rm -f jenkins 
-   3.No initialAdminPassword
-        Jenkins volume already exists
-        docker rm -f jenkins
-        docker volume rm jenkins_home
+**Common Docker Jenkins Errors & Fixes**
+
+1. Docker: not found
+Root Cause:
+Docker CLI missing inside Jenkins container.
+Fix:
+Created custom Jenkins image with Docker CLI installed.
+
+2️ Docker Socket Permission Denied
+permission denied while trying to connect to Docker daemon
+Root Cause:
+Socket owned by root.
+Fix (Lab Only):
+Run Jenkins container as root.
+
+3️ Docker API Version Mismatch
+client version too old
+Root Cause:
+Outdated Debian docker.io package.
+Fix:
+Installed official docker-ce-cli.
+
+4️Jenkinsfile Not Found
+Root Cause:
+Incorrect script path or extra whitespace.
+Correct Script Path:
+01-ci-cd-basics/Jenkinsfile
+
+5️ fatal: not in a git directory
+Root Cause:
+Lightweight checkout failure.
+Fix:
+Disabled Lightweight Checkout to force full clone.
+
+6️ UI Slowness
+Root Cause:
+Low JVM heap and Docker Desktop overhead.
+Fix:-e JAVA_OPTS="-Xms512m -Xmx2048m"1.Docker daemon not running
+
+7. Cannot connect to the Docker daemon
+   → Start Docker Desktop.
+8. Container name conflict
+   Container name "/jenkins" is already in use
+   docker start jenkins or docker rm -f jenkins 
+9.No initialAdminPassword
+   Jenkins volume already exists
+   docker rm -f jenkins
+   docker volume rm jenkins_home
+
+   
         
 Jenkins Installation on EC2 (Interview-Ready)
    Step 1: Launch EC2
@@ -91,6 +137,7 @@ Step 8: Start Jenkins
 Step 9: Unlock Jenkins
            * sudo cat /var/lib/jenkins/secrets/initialAdminPassword
               Open: http://<EC2_PUBLIC_IP>:8080
+
               
 
 Jenkins Pipeline Configuration
@@ -130,6 +177,43 @@ pipeline {
         }
     }
 }
+
+Pipeline Stages Explained
+1️⃣ Checkout
+Clones repository from GitHub:
+Full clone used
+Lightweight checkout disabled for reliability
+
+2️⃣ Maven Build
+mvn clean package
+Generates executable JAR from Spring Boot application.
+This stage validates:
+Code compilation
+Dependency resolution
+Build reproducibility
+
+3️⃣ Docker Image Build
+docker build -t foundations-app:ci -f 02-docker/Dockerfile .
+Builds Docker image using multi-stage Dockerfile.
+Multi-stage approach ensures:
+Build dependencies excluded from runtime image
+Smaller, production-ready container
+
+4️⃣ Post Stage
+Prints
+CI passed and Docker image built
+Confirms successful completion.
+
+Docker Build Behavior
+Docker uses layer caching.
+If:Dockerfile unchanged
+Source unchanged
+Then build output shows:
+CACHED
+Image ID remains same because Docker is content-addressable.
+To force rebuild:
+docker build --no-cache ...
+
 Why this works
 * Jenkins clones repo root
 * Jenkinsfile is resolved via script path
@@ -174,3 +258,4 @@ Outcome of This Stage
 
 Design Summary
     This CI setup enforces early validation of application correctness.By separating build and test automation from packaging and deployment,         failures are detected quickly and debugging remains simple.This foundation allows Docker and deployment stages to be added without               weakening feedback loops.
+
