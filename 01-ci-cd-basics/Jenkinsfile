@@ -1,54 +1,65 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'maven-3'
+    environment {
+        IMAGE_NAME = "foundations-app"
+        IMAGE_TAG  = "ci"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Build & Test') {
+        stage('Build Application') {
             steps {
                 dir('00-foundations/app') {
-                    sh 'mvn clean package'
+                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        stage('Docker Build') {
+        stage('Build Docker Image') {
             steps {
-                sh '''
-                  docker build \
-                    -t foundations-app:ci \
-                    -f 02-docker/Dockerfile .
-                '''
-            }
-        }
-    }
-stage('Push to Docker Hub') {
-    steps {
-        script {
-            withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                 sh """
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker tag foundations-app:ci $DOCKER_USER/foundations-app:ci
-                    docker push $DOCKER_USER/foundations-app:ci
+                    docker build \
+                    -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                    -f 02-docker/Dockerfile .
                 """
             }
         }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS'
+                        )
+                    ]) {
+                        sh """
+                            echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker push ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker logout
+                        """
+                    }
+                }
+            }
+        }
     }
-}
-post {
-    success {
-            echo 'CI passed and Docker image built'
+
+    post {
+        success {
+            echo 'CI passed and Docker image pushed successfully.'
         }
         failure {
-            echo 'Pipeline failed before Docker packaging'
+            echo 'Pipeline failed.'
         }
     }
 }
