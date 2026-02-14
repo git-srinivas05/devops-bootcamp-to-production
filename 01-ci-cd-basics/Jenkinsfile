@@ -43,8 +43,8 @@ stage('Push to Docker Hub') {
         }
     }
 }
-      post {
-        success {
+post {
+    success {
             echo 'CI passed and Docker image built'
         }
         failure {
