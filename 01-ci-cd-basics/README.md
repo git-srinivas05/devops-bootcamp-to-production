@@ -145,6 +145,7 @@ Jenkinsfile Location
 01-ci-cd-basics/Jenkinsfile
 
 Jenkinsfile (CI Pipeline)
+
 pipeline {
     agent any
 
@@ -166,14 +167,24 @@ pipeline {
                 }
             }
         }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                  docker build \
+                    -t foundations-app:ci \
+                    -f 02-docker/Dockerfile .
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build successful'
+            echo 'CI passed and Docker image built'
         }
         failure {
-            echo 'Build failed'
+            echo 'Pipeline failed before Docker packaging'
         }
     }
 }
@@ -258,4 +269,5 @@ Outcome of This Stage
 
 Design Summary
     This CI setup enforces early validation of application correctness.By separating build and test automation from packaging and deployment,         failures are detected quickly and debugging remains simple.This foundation allows Docker and deployment stages to be added without               weakening feedback loops.
+
 
