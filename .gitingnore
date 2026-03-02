@@ -1,0 +1,18 @@
+# Maven
+target/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Mac
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log

@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven-3'
+    }
+
+    environment {
+        IMAGE_NAME = "foundations-app"
+        IMAGE_TAG  = "latest"
+        AWS_REGION = "us-east-1"
+        AWS_ACCOUNT_ID = "398995119442"
+        ECR_REPO = "bootcamp-app"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                dir('00-foundations/app') {
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build \
+                    -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                    -f 02-docker/Dockerfile .
+                """
+            }
+        }
+
+        stage('Login to ECR') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-bootcamp'
+                ]]) {
+                    sh """
+                        aws ecr describe-repositories \
+                        --repository-name ${ECR_REPO} \
+                        --region ${AWS_REGION} || \
+                        aws ecr create-repository \
+                        --repository-name ${ECR_REPO} \
+                        --region ${AWS_REGION}
+
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS \
+                        --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                    """
+                }
+            }
+        }
+
+        stage('Tag & Push to ECR') {
+            steps {
+                sh """
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
+                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+
+                    docker push \
+                    ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI passed and image pushed to ECR successfully.'
+        }
+        failure {
+            echo 'Pipeline failed.'
+        }
+    }
+}
