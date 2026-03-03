@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bootcamp-service
+  namespace: bootcamp
+spec:
+  type: LoadBalancer
+  selector:
+    app: bootcamp
+  ports:
+    - port: 80
+      targetPort: 8080
