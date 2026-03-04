@@ -74,7 +74,33 @@ pipeline {
             }
         }
     }
+    stage('Deploy to EKS') {
+    steps {
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: 'aws-bootcamp'
+        ]])
+        {
+            sh """
+                echo "Updating kubeconfig..."
+                aws eks update-kubeconfig \
+                  --region ${AWS_REGION} \
+                  --name bootcamp-eks
 
+                echo "Verifying cluster access..."
+                kubectl get nodes
+
+                echo "Updating deployment image..."
+                kubectl set image deployment/bootcamp-app \
+                  bootcamp-container=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG} \
+                  -n bootcamp
+
+                echo "Waiting for rollout..."
+                kubectl rollout status deployment/bootcamp-app -n bootcamp
+            """
+        }
+    }
+}
     post {
         success {
             echo 'CI passed and image pushed to ECR successfully.'
