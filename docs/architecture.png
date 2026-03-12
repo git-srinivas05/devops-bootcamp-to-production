@@ -1,0 +1,35 @@
+Developer
+   │
+   ▼
+GitHub Repository
+   │
+   ▼
+Jenkins CI/CD
+   │
+   ├── Maven Build
+   ├── Docker Build
+   └── Push Image
+   │
+   ▼
+AWS ECR
+   │
+   ▼
+Amazon EKS Cluster
+   │
+   ├── Kubernetes Deployment
+   │      ├── Pod 1
+   │      └── Pod 2
+   │
+   ├── Service (LoadBalancer)
+   │
+   └── Horizontal Pod Autoscaler
+   │
+   ▼
+Monitoring Stack
+   │
+   ├── Prometheus
+   ├── Node Exporter
+   └── kube-state-metrics
+   │
+   ▼
+Grafana Dashboards
