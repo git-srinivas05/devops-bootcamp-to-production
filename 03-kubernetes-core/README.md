@@ -1,227 +1,246 @@
-# 03 – Kubernetes Core Deployment (Amazon EKS)
+# 03 – Kubernetes Core Deployment
 
-## Objective
+This stage focuses on deploying the containerized application into a Kubernetes cluster running on Amazon EKS.
 
-Deploy the Spring Boot application to Amazon EKS using production-grade Kubernetes practices:
+It demonstrates how core Kubernetes resources are used to run, expose, and manage applications in a production environment.
+
+---
+
+# Objective
+
+Deploy the Dockerized application into Kubernetes and implement core features such as:
 
 * Namespace isolation
-* Deployment with readiness & liveness probes
-* Resource requests & limits
-* LoadBalancer exposure
-* Structured debugging & verification
+* Deployment configuration
+* Readiness and liveness probes
+* Resource management
+* Service exposure
 
 ---
 
-## Architecture Flow
+# Kubernetes Resources Used
 
+## Namespace
+
+A dedicated namespace was created to isolate the application resources.
+
+```id="ns01"
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bootcamp
 ```
-Jenkins → ECR → EKS → LoadBalancer → Public Access
+
+Namespaces help organize resources and prevent conflicts between applications.
+
+---
+
+# Deployment
+
+The application is deployed using a **Kubernetes Deployment**.
+
+Key responsibilities of the deployment:
+
+* Maintain desired replica count
+* Perform rolling updates
+* Automatically restart failed pods
+
+Example configuration:
+
+```id="dep01"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bootcamp-app
+  namespace: bootcamp
+spec:
+  replicas: 2
 ```
 
-CI builds the Docker image and pushes it to ECR.
-EKS nodes pull the image using their IAM role and run it inside the cluster.
+This ensures **high availability** by running multiple pod replicas.
 
 ---
 
-## Namespace Isolation
+# Readiness Probe
 
-kubectl apply -f namespace.yaml
+Readiness probes ensure that a container only receives traffic when it is ready.
 
-All resources are deployed inside:
-bootcamp
+```id="probe01"
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+```
 
-This avoids polluting the `default` namespace and allows better RBAC, quotas, and isolation.
+If the readiness probe fails, Kubernetes removes the pod from the service endpoints.
+
+This prevents users from hitting an application that has not fully started.
 
 ---
 
-## Deployment Design
+# Liveness Probe
 
-Key configurations:
+Liveness probes detect when an application becomes unresponsive.
 
-* 2 replicas
-* Resource requests & limits
-* Readiness probe
-* Liveness probe
-* Explicit imagePullPolicy
+```id="probe02"
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 10
+```
 
-Example:
+If the probe fails repeatedly, Kubernetes automatically **restarts the container**.
 
-yaml
+---
+
+# Resource Requests and Limits
+
+Resource limits ensure pods do not consume excessive node resources.
+
+```id="resources01"
 resources:
   requests:
-    cpu: "200m"
-    memory: "256Mi"
+    cpu: "100m"
+    memory: "128Mi"
   limits:
     cpu: "500m"
     memory: "512Mi"
-Why?
+```
 
-* Prevents resource starvation
-* Ensures scheduler placement
-* Avoids noisy-neighbor issues
+This helps maintain cluster stability.
 
 ---
 
-## Readiness vs Liveness
+# Service
 
-### Readiness Probe
-Determines if pod can receive traffic.
+A Kubernetes Service exposes the application to external traffic.
 
-If it fails:
-* Pod removed from Service endpoints
-* Container NOT restarted
+```id="svc01"
+apiVersion: v1
+kind: Service
+metadata:
+  name: bootcamp-service
+spec:
+  type: LoadBalancer
+```
 
-Used for:
-* Startup delay
-* Dependency validation (DB, external APIs)
-
----
-
-### Liveness Probe
-Determines if container must be restarted.
-
-If it fails:
-* Kubernetes restarts container
-
-Used for:
-* Deadlocks
-* Stuck threads
-* Frozen application
+Using **LoadBalancer** creates an AWS Elastic Load Balancer that routes traffic to the application pods.
 
 ---
 
-## Service Exposure
+# Deployment Verification
 
-yaml
-type: LodBalancer
+Verify resources using:
 
-EKS provisions AWS ELB automatically.
-Verify:
+```id="cmd01"
+kubectl get pods -n bootcamp
+kubectl get deployment -n bootcamp
 kubectl get svc -n bootcamp
+```
+
+Example output:
+
+```id="cmd02"
+bootcamp-app-xxxxx   Running
+bootcamp-app-yyyyy   Running
+```
 
 ---
 
-# Issues Faced & Production Debugging
+# Common Errors Encountered
 
-## 1.ImagePullBackOff – Wrong IAM Role
-
-Symptom:
-ImagePullBackOff
-
-Root Cause:
-Node IAM role missing:
-AmazonEC2ContainerRegistryReadOnly
-
-Fix:
-Attach required policy to node group IAM role.
-
-Lesson:
-EKS nodes authenticate to ECR using IAM — not Docker credentials.
-
----
-
-## 2.ImagePullBackOff – Architecture Mismatch
-Error:
-no match for platform in manifest
-
-Root Cause:
-Image built on Apple Silicon (arm64),
-EKS nodes running amd64.
-
-Fix:
-Updated build command:
-
-docker build --platform linux/amd64
-
-Lesson:
-Always align image architecture with cluster architecture.
-
----
-
-## 3.CrashLoopBackOff
-Symptom:
-CrashLoopBackOff
-
-Meaning:
-Container starts → crashes → restarts repeatedly.
-
-Debug Steps:
-
-kubectl logs <pod-name> -n bootcamp
-kubectl describe pod <pod-name> -n bootcamp
-
-Common Causes:
-* Wrong application port
-* Unhandled exception
-* Missing environment variables
-* Dependency connection failure
-
-Lesson:
-CrashLoopBackOff indicates application-level failure, not image pull issue.
-
----
-
-## 4.OOMKilled (Out of Memory)
-
-Symptom:
-Reason: OOMKilled
+## ImagePullBackOff
 
 Cause:
-Container exceeded memory limit.
+
+* Kubernetes cannot pull the container image from ECR.
+
+Possible reasons:
+
+* Incorrect repository name
+* Authentication failure
+* Missing IAM permissions
 
 Fix:
-* Increase memory limit
-* Optimize application memory usage
 
-Example:
-yaml
-limits:
-  memory: "512Mi"
+```id="cmd03"
+aws eks update-kubeconfig
+```
 
-Lesson:
-Always define resource limits to prevent node instability.
+Ensure worker nodes have **ECR access permissions**.
 
 ---
 
-## 5.Whitelabel Error Page (404)
+## CrashLoopBackOff
 
-Symptom:
-Application accessible but returns 404.
+Cause:
 
-Root Cause:
-No mapping for `/`.
+* Application crashes repeatedly.
 
-Infrastructure was healthy; issue was application routing.
+Debug using:
 
-Lesson:
-Differentiate infrastructure failure from application logic issues.
+```id="cmd04"
+kubectl logs <pod-name>
+```
 
-# Verification Commands
+Common reasons include:
 
-kubectl get pods -n bootcamp
-kubectl describe pod <pod>
-kubectl logs <pod>
-kubectl get svc -n bootcamp
-kubectl get endpoints -n bootcamp
-kubectl get nodes
+* incorrect environment variables
+* application runtime errors
+* port conflicts
 
-Healthy Indicators:
-* Pods in `Running`
-* READY 1/1
-* No restart loops
-* LoadBalancer accessible
-* Endpoints populated
+---
+
+## OOMKilled
+
+Cause:
+
+* Container exceeded memory limit.
+
+Solution:
+
+Increase memory limits:
+
+```id="cmd05"
+resources:
+  limits:
+    memory: "1Gi"
+```
+
+---
+
+# Rolling Updates
+
+When a new container image is deployed, Kubernetes performs a **rolling update**.
+
+This ensures zero downtime by gradually replacing old pods with new ones.
+
+Check rollout status:
+
+```id="cmd06"
+kubectl rollout status deployment bootcamp-app -n bootcamp
+```
+
+Rollback if needed:
+
+```id="cmd07"
+kubectl rollout undo deployment bootcamp-app -n bootcamp
+```
 
 ---
 
 # Outcome
 
-Successfully deployed containerized application to EKS with:
+At the end of this stage, the application runs successfully inside Kubernetes with:
 
-* Proper IAM integration
-* Architecture compatibility validation
-* Health probes
-* Resource governance
-* Structured production debugging
+* multiple replicas
+* health checks
+* resource limits
+* external access through a LoadBalancer
 
-This stage demonstrates strong understanding of Kubernetes runtime behavior, failure analysis, and cloud-native troubleshooting.
+This forms the foundation for implementing automated CI/CD deployments.
+
